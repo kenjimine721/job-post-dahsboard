@@ -479,22 +479,55 @@ if raw_df is None or raw_df.empty:
     st.info("Upload a CSV or Excel export to load the dashboard.")
     st.stop()
 
-dashboard_df = enrich_display_frame(canonicalize_probe_frame(raw_df))
+base_dashboard_df = enrich_display_frame(canonicalize_probe_frame(raw_df))
+dashboard_df = base_dashboard_df.copy()
 
 st.subheader(source_label)
 col_loaded, col_clean, col_sources = st.columns(3)
-col_loaded.metric("Loaded rows", len(dashboard_df) + removed_duplicates)
-col_clean.metric("Clean rows", len(dashboard_df))
+col_loaded.metric("Loaded rows", len(base_dashboard_df) + removed_duplicates)
+col_clean.metric("Clean rows", len(base_dashboard_df))
 col_sources.metric("Duplicates removed", removed_duplicates)
 
 with st.sidebar:
     st.header("Filters")
-    board_filter = st.multiselect("Job board", filter_options(dashboard_df, "job_board"))
-    competitor_filter = st.multiselect("Competitor", filter_options(dashboard_df, "competitor"))
-    role_filter = st.multiselect("Role family", filter_options(dashboard_df, "llm_role_family"))
-    locale_filter = st.multiselect("Locale", filter_options(dashboard_df, "llm_locale"))
-    relevance_filter = st.multiselect("Relevance", ["High", "Medium", "Low", "Not relevant"])
-    specific_only = st.checkbox("Specific job posts only", value=False)
+    if st.button("Reset filters"):
+        for key in [
+            "filter_job_board",
+            "filter_competitor",
+            "filter_role_family",
+            "filter_locale",
+            "filter_relevance",
+            "filter_specific_only",
+        ]:
+            st.session_state.pop(key, None)
+        st.rerun()
+
+    board_filter = st.multiselect(
+        "Job board",
+        filter_options(base_dashboard_df, "job_board"),
+        key="filter_job_board",
+    )
+    competitor_filter = st.multiselect(
+        "Competitor",
+        filter_options(base_dashboard_df, "competitor"),
+        key="filter_competitor",
+    )
+    role_filter = st.multiselect(
+        "Role family",
+        filter_options(base_dashboard_df, "llm_role_family"),
+        key="filter_role_family",
+    )
+    locale_filter = st.multiselect(
+        "Locale",
+        filter_options(base_dashboard_df, "llm_locale"),
+        key="filter_locale",
+    )
+    relevance_filter = st.multiselect(
+        "Relevance",
+        ["High", "Medium", "Low", "Not relevant"],
+        key="filter_relevance",
+    )
+    specific_only = st.checkbox("Specific job posts only", value=False, key="filter_specific_only")
 
 dashboard_df = filter_by_text_values(dashboard_df, "job_board", board_filter)
 dashboard_df = filter_by_text_values(dashboard_df, "competitor", competitor_filter)
@@ -517,6 +550,8 @@ col2.metric("Confirmed job posts", len(specific))
 col3.metric("Strong matches", len(high_relevance))
 col4.metric("Priority role types", len(target_roles))
 col5.metric("Low-fit posts", len(low_relevance))
+
+st.caption(f"Showing {len(dashboard_df):,} of {len(base_dashboard_df):,} clean postings after filters.")
 
 with st.expander("How to read these terms"):
     st.markdown(
