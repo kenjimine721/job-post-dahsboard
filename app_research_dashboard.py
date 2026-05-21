@@ -119,6 +119,9 @@ ENRICHMENT_COLUMNS = [
 
 def read_tabular_file(source: str | Path | object) -> pd.DataFrame:
     name = str(getattr(source, "name", source)).lower()
+    if hasattr(source, "seek"):
+        source.seek(0)
+
     if name.endswith((".xlsx", ".xls")):
         return pd.read_excel(source, dtype=str).fillna("")
 
@@ -453,7 +456,8 @@ uploaded_files = st.file_uploader(
     type=["csv", "xlsx", "xls"],
     accept_multiple_files=True,
 )
-if uploaded_files:
+upload_signature = tuple((uploaded_file.name, uploaded_file.size) for uploaded_file in uploaded_files or [])
+if uploaded_files and upload_signature != st.session_state.get("dashboard_upload_signature"):
     frames = []
     for uploaded_file in uploaded_files:
         frame = canonicalize_probe_frame(read_tabular_file(uploaded_file))
@@ -465,6 +469,7 @@ if uploaded_files:
     st.session_state["dashboard_raw_df"] = raw_df
     st.session_state["dashboard_removed_duplicates"] = removed_duplicates
     st.session_state["dashboard_source_label"] = source_label
+    st.session_state["dashboard_upload_signature"] = upload_signature
 elif "dashboard_raw_df" in st.session_state:
     raw_df = st.session_state["dashboard_raw_df"]
     removed_duplicates = int(st.session_state.get("dashboard_removed_duplicates", 0) or 0)
