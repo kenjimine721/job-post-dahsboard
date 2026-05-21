@@ -371,6 +371,20 @@ def friendly_table(frame: pd.DataFrame) -> pd.DataFrame:
     return frame.rename(columns=FRIENDLY_COLUMN_NAMES)
 
 
+def filter_options(frame: pd.DataFrame, column: str) -> list[str]:
+    if column not in frame:
+        return []
+    values = frame[column].astype(str).str.strip()
+    values = values[values.ne("") & values.str.lower().ne("nan")]
+    return sorted(values.unique().tolist())
+
+
+def filter_by_text_values(frame: pd.DataFrame, column: str, selected: list[str]) -> pd.DataFrame:
+    if not selected or column not in frame:
+        return frame
+    return frame[frame[column].astype(str).str.strip().isin(selected)]
+
+
 def top_text(values: pd.Series, limit: int = 3) -> str:
     cleaned = values.astype(str).str.strip()
     cleaned = cleaned[cleaned.ne("") & cleaned.str.lower().ne("nan")]
@@ -448,6 +462,13 @@ if uploaded_files:
     combined = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
     raw_df, removed_duplicates = dedupe_probe_frame(combined)
     source_label = "Uploaded files" if len(uploaded_files) > 1 else uploaded_files[0].name
+    st.session_state["dashboard_raw_df"] = raw_df
+    st.session_state["dashboard_removed_duplicates"] = removed_duplicates
+    st.session_state["dashboard_source_label"] = source_label
+elif "dashboard_raw_df" in st.session_state:
+    raw_df = st.session_state["dashboard_raw_df"]
+    removed_duplicates = int(st.session_state.get("dashboard_removed_duplicates", 0) or 0)
+    source_label = str(st.session_state.get("dashboard_source_label", "Uploaded files"))
 
 if raw_df is None or raw_df.empty:
     st.info("Upload a CSV or Excel export to load the dashboard.")
@@ -463,29 +484,18 @@ col_sources.metric("Duplicates removed", removed_duplicates)
 
 with st.sidebar:
     st.header("Filters")
-    board_filter = st.multiselect("Job board", sorted(dashboard_df["job_board"].dropna().unique().tolist()))
-    competitor_filter = st.multiselect("Competitor", sorted(dashboard_df["competitor"].dropna().unique().tolist()))
-    role_filter = st.multiselect(
-        "Role family",
-        sorted(value for value in dashboard_df["llm_role_family"].replace("", pd.NA).dropna().unique().tolist()),
-    )
-    locale_filter = st.multiselect(
-        "Locale",
-        sorted(value for value in dashboard_df["llm_locale"].replace("", pd.NA).dropna().unique().tolist()),
-    )
+    board_filter = st.multiselect("Job board", filter_options(dashboard_df, "job_board"))
+    competitor_filter = st.multiselect("Competitor", filter_options(dashboard_df, "competitor"))
+    role_filter = st.multiselect("Role family", filter_options(dashboard_df, "llm_role_family"))
+    locale_filter = st.multiselect("Locale", filter_options(dashboard_df, "llm_locale"))
     relevance_filter = st.multiselect("Relevance", ["High", "Medium", "Low", "Not relevant"])
     specific_only = st.checkbox("Specific job posts only", value=False)
 
-if board_filter:
-    dashboard_df = dashboard_df[dashboard_df["job_board"].isin(board_filter)]
-if competitor_filter:
-    dashboard_df = dashboard_df[dashboard_df["competitor"].isin(competitor_filter)]
-if role_filter:
-    dashboard_df = dashboard_df[dashboard_df["llm_role_family"].isin(role_filter)]
-if locale_filter:
-    dashboard_df = dashboard_df[dashboard_df["llm_locale"].isin(locale_filter)]
-if relevance_filter:
-    dashboard_df = dashboard_df[dashboard_df["llm_relevance"].isin(relevance_filter)]
+dashboard_df = filter_by_text_values(dashboard_df, "job_board", board_filter)
+dashboard_df = filter_by_text_values(dashboard_df, "competitor", competitor_filter)
+dashboard_df = filter_by_text_values(dashboard_df, "llm_role_family", role_filter)
+dashboard_df = filter_by_text_values(dashboard_df, "llm_locale", locale_filter)
+dashboard_df = filter_by_text_values(dashboard_df, "llm_relevance", relevance_filter)
 if specific_only:
     dashboard_df = dashboard_df[dashboard_df["is_specific_job_post"]]
 
